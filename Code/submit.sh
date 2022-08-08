@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name chemprop_gh
+#SBATCH --job-name test
 #SBATCH -o %x-%j.log
 #SBATCH -N 1
 #SBATCH -c 20
@@ -30,7 +30,7 @@ echo "MASTER_PORT : ${MASTER_PORT}"
 
 gnn_type='mpn'
 data_path='/Data/Ylide_Gas_SpecialCases_Removed_gh.csv'
-log_dir='ylide/gh/expt0'
+log_dir='ylide/test/expt1'
 split_path='splits/ylide/cleaned/split_'
 lr=1e-3
 
@@ -39,18 +39,16 @@ lr=1e-3
 depth=3
 hidden_size=600
 # FFN Parameters----------------
-
 ffn_depth=1
 ffn_hiddensize=600
 
 #Entire Model Parameters--------
-n_epochs=100
+n_epochs=3
 batch_size=50
 num_workers=20
 n_out=1
 n_ensemble=1
-n_fold=5
-
+n_fold=3
 
 
 mpirun ${MPI_FLAGS} python train.py  --data_path $data_path --log_dir $log_dir --gnn_type $gnn_type --lr $lr --ffn_depth $ffn_depth --ffn_hidden_size $ffn_hiddensize --ensemble $n_ensemble  --n_fold $n_fold --n_out $n_out --n_epochs $n_epochs

@@ -1,3 +1,8 @@
 Models/
 Data/
 Code/old_out
+Code/out_files/
+Code/.ipynb
+Code/model/.ipynb*
+Code/model/__pycache__*
+.ipynb*
