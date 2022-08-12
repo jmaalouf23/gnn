@@ -1,14 +1,27 @@
 # ylide_gnn
 
-Machine learning models to predict the properties of redox mediators.
+This repository uses chemprop's development of a message passing neural network (https://github.com/chemprop/chemprop) wrapped in custom code to add a mlp readout layer able to map to multiple properties at once to predict thermodynamic properties of ylide redox mediators. Currently, the models have been trained to predict properties that are important for redox mediator performance including redox potential, deprotonation free energy, and Hydrogen abstraction energy.
 
-This repository uses chemprop's development of a message passing neural network (https://github.com/chemprop/chemprop) to predict thermodynamic properties of ylide redox mediators. The Chemprop MPN class is wrapped in custom code to add a mlp readout layer after the molecule undergoes featurization and message passing to become vectorized.
+## How to Use
 
-The current implementation performs random splits on the data.
+To train a model, run `python train.py --data_path data_path --log_dir log_dir`
 
-Currently, the models have been trained to predict properties that are important for redox mediator performance including redox potential, deprotonation free energy, and Hydrogen abstraction energy.
+`data_path` is the path to the directory where the .csv file containing the data and labels
+
+Additional specifications that can be made by passing in arguments can be found in `Code/model/parsing.py` and can be implemented as follows. 
+
+`python train.py --data_path data_path --log_dir log_dir --lr 1e-3`
+
+In this case we are setting the initial learning rate to 1e-3.
 
 
-Models can be trained by running python train.py.
+### Data
+Data should come in the form of a .csv file where the first column are SMILES strings of the molecules, and each target property is an additional column. The number of target properties read should be specified by the `n_out` argument. For example, if `n_out' is 2, the script will read the next two columns after the SMILES string column, even if there are 3 additional columns after the SMILES string column.
+
+### Data Splits
+If `split_path` is not specified, the script will perform a random split on the data in a 80:10:20 ratio making up the training, validation, and test sets respectively.
+
+The user can also specify a directory with `split_path` where numpy arrays containing the split indices can be found. Each split should be named `split_i.npy` where i is the index of the split starting at 0. Each `split_i.npy` should contain 3 numpy arrays, the train indices, validation indices, and the test indices. The indices correspond to the indices in the data.csv file. The `split_path` should include `split_` in the name.
+
 
 
