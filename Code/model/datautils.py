@@ -20,7 +20,7 @@ class Dataset(torch.utils.data.Dataset):
         return len(self.X)
 
     def __getitem__(self, idx):
-        return self.X[idx,:],self.y[idx]
+        return self.X[idx,:],self.y[idx,:]
     
     
 def collate(batch):

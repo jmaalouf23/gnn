@@ -6,4 +6,6 @@ Code/.ipynb*
 Code/.ipynb_checkpoints/*
 Code/model/.ipynb*
 Code/model/__pycache__*
+Code/__pycache__/
+Code/*.log
 .ipynb*

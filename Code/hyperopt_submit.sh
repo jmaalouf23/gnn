@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name test
+#SBATCH --job-name hyperopt
 #SBATCH -o %x-%j.log
 #SBATCH -N 1
 #SBATCH -c 20
@@ -26,29 +26,32 @@ echo "MASTER_PORT : ${MASTER_PORT}"
 # Do not use the torch.distributed.launch utility. Use mpirun as shown below to launch your code. 
 
 
+
 data_path='/Data/Ylide_Gas_SpecialCases_Removed_redox.csv'
-log_dir='ylide/test/expt7'
+log_dir='ylide/hyperopt/expt0'
 split_path='ylide/80_10_20/split_'
-lr=1e-3
-
-
-#GNN Parameters-----------------
 gnn_type='mpn'
-depth=3
-hidden_size=600
 
-# FFN Parameters----------------
-ffn_depth=3
-ffn_hiddensize=600
+#-----GNN Parameters-----------------
+message='sum'
+pool='sum'
 
-#Entire Model Parameters--------
+#-----Entire Model Parameters--------
 n_epochs=2
-batch_size=50
 num_workers=20
 n_out=1
-ensemble=2
-n_fold=2
-dropout=0
+n_ensemble=1
+n_fold=5
+#----Hyperopt Parameters------
+n_trials=50
 
 
-mpirun ${MPI_FLAGS} python train.py  --data_path $data_path --log_dir $log_dir --split_path $split_path --gnn_type $gnn_type --lr $lr --ffn_depth $ffn_depth --ffn_hidden_size $ffn_hiddensize --ensemble $ensemble  --n_fold $n_fold --n_out $n_out --n_epochs $n_epochs --dropout $dropout
+
+echo "Start time: $(date '+%Y-%m-%d_%H:%M:%S')"
+
+
+mpirun ${MPI_FLAGS} python hyperopt.py --data_path $data_path --split_path $split_path --hyperopt_dir $log_dir --gnn_type $gnn_type --graph_pool $pool --ensemble $n_ensemble  --n_fold $n_fold --n_epochs $n_epochs --n_trials $n_trials --scaled_err True --n_out $n_out
+
+echo "End time: $(date '+%Y-%m-%d_%H:%M:%S')"
+
+
