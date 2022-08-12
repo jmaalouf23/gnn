@@ -1,6 +1,6 @@
 # ylide_gnn
 
-This repository uses chemprop's development of a message passing neural network (https://github.com/chemprop/chemprop) wrapped in custom code to add a mlp readout layer able to map to multiple properties at once to predict thermodynamic properties of ylide redox mediators. Currently, the models have been trained to predict properties that are important for redox mediator performance including redox potential, deprotonation free energy, and Hydrogen abstraction energy.
+This repository uses chemprop's development of a message passing neural network (https://github.com/chemprop/chemprop) wrapped in custom code to add an mlp readout layer able to map to multiple properties at once to predict thermodynamic properties of ylide redox mediators. Currently, the models have been trained to predict properties that are important for redox mediator performance including redox potential, deprotonation free energy, and Hydrogen abstraction energy.
 
 ## How to Use
 
