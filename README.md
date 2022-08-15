@@ -29,5 +29,5 @@ MultiGPU training is built in and run with PyTorch's DistributedDataParallel mod
 
 ### Hyperparameter Tuning
 
-Hyperparameters can be tuned by running `python hyperopt.py' which uses optuna to implement a Bayesian Hyperparameter optimization algorithm. 
+Hyperparameters can be tuned by running `python hyperopt.py` which uses optuna to implement a Bayesian Hyperparameter optimization algorithm. 
 
