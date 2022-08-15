@@ -23,5 +23,11 @@ If `split_path` is not specified, the script will perform a random split on the 
 
 The user can also specify a directory with `split_path` where numpy arrays containing the split indices can be found. Each split should be named `split_i.npy` where i is the index of the split starting at 0. Each `split_i.npy` should contain 3 numpy arrays, the train indices, validation indices, and the test indices. The indices correspond to the indices in the data.csv file. The `split_path` should include `split_` in the name.
 
+### Multi GPU Training
 
+MultiGPU training is built in and run with PyTorch's DistributedDataParallel module. Code automatically detects number of nodes and GPUs allocated to the job and splits up training accordingly. This can usually be specified by the appropriate `#SBATCH` command if running on a server with slurm. 
+
+### Hyperparameter Tuning
+
+Hyperparameters can be tuned by running `python hyperopt.py' which uses optuna to implement a Bayesian Hyperparameter optimization algorithm. 
 
