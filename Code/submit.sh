@@ -26,28 +26,28 @@ echo "MASTER_PORT : ${MASTER_PORT}"
 # Do not use the torch.distributed.launch utility. Use mpirun as shown below to launch your code. 
 
 
-data_path='/Data/Ylide_Gas_SpecialCases_Removed_redox.csv'
-log_dir='ylide/test/expt8'
+data_path='/Data/Ylide_Gas_SpecialCases_Removed.csv'
+log_dir='ylide/test/expt11'
 split_path='ylide/80_10_20/split_'
 lr=1e-3
 
 
 #GNN Parameters-----------------
 gnn_type='mpn'
-depth=3
-hidden_size=600
+depth=6
+hidden_size=1200
 
 # FFN Parameters----------------
-ffn_depth=3
-ffn_hiddensize=600
+ffn_depth=2
+ffn_hiddensize=300
 
 #Entire Model Parameters--------
-n_epochs=2
-batch_size=50
+n_epochs=100
+batch_size=25
 num_workers=20
-n_out=1
-ensemble=2
-n_fold=2
+n_out=3
+ensemble=1
+n_fold=1
 dropout=0
 
 

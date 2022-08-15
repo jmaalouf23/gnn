@@ -8,7 +8,7 @@ import joblib
 import socket
 
 from model.models import MainModel
-from model.utils import create_logger, make_learning_curve,make_parity, loop, get_dist_env, get_loss_func, construct_loader
+from model.utils import create_logger, make_learning_curve,make_parity, loop, get_dist_env, get_loss_func, construct_loader, Standardizer
 from model.datautils import Dataset, collate
 from model.parsing import parse_train_args,add_train_args, modify_train_args
 
@@ -56,14 +56,16 @@ def optimize(trial, args, rank, world_size,hostname):
     
     for n_fold in range(args.n_fold):
         
-        train_loader, val_loader, test_loader= construct_loader(X, y, world_size, rank, n_fold, args) 
+        
+        device=rank%2
+        train_loader, val_loader, test_loader, mu, std= construct_loader(X, y, world_size, rank, n_fold, args)
+        standardizer= Standardizer(mu,std,device)
         
 
         # create model, optimizer, scheduler, and loss fn
         for model_index in range(args.ensemble):
             
             model = MainModel(args,rank)
-            device=rank%2
             model=model.to(device)
             model=DistributedDataParallel(model,device_ids=[rank%2]) 
             optimizer = optim.Adam(model.parameters(), lr=lr)
@@ -76,8 +78,8 @@ def optimize(trial, args, rank, world_size,hostname):
 
         # train
             for epoch in range(0, args.n_epochs):
-                train_loss = loop(model, train_loader, loss, device, optimizer)
-                val_loss = loop(model, val_loader, loss, device, optimizer, evaluation=True)
+                train_loss = loop(model, train_loader, loss, device, optimizer, standardizer)
+                val_loss = loop(model, val_loader, loss, device, optimizer, standardizer, evaluation=True)
                     
                 if val_loss <= best_val_loss:
                     best_val_loss = val_loss

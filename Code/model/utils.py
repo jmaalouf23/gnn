@@ -45,7 +45,24 @@ def create_logger(name: str, log_dir: str = None) -> logging.Logger:
 
     return logger
 
-def loop(model, loader, loss, device, optimizer, evaluation=False): #consider changing name to eval
+
+def get_loss_func(args: Namespace) -> nn.Module:
+    
+    """
+    Gets the loss function corresponding to a given dataset type.
+
+    :param args: Namespace containing the dataset type ("classification" or "regression").
+    :return: A PyTorch loss function.
+    """
+    if args.task == 'classification':
+        return nn.BCELoss(reduction='mean')
+
+    if args.task == 'regression':
+        return nn.MSELoss(reduction='mean')
+    
+    
+
+def loop(model, loader, loss, device, optimizer, standardizer, evaluation=False): #consider changing name to eval
     
     """
     Given a model, if evaliation = False this function "trains" the model with a specific loss function
@@ -73,10 +90,13 @@ def loop(model, loader, loss, device, optimizer, evaluation=False): #consider ch
 
     for data in loader:
         x, y = data
+        
         y=torch.tensor(y).to(device) 
-        pred = model(x)
-        #loss = (pred.squeeze()-y.squeeze()).pow(2).mean()
+        y=standardizer(y)
+        pred = model(x)        
+        
         result=loss(pred.float(),y.float())
+        
         if not evaluation:
             optimizer.zero_grad()
             result.backward()
@@ -86,21 +106,6 @@ def loop(model, loader, loss, device, optimizer, evaluation=False): #consider ch
 
     return np.array(batch_losses).mean()   
 
-
-
-def get_loss_func(args: Namespace) -> nn.Module:
-    
-    """
-    Gets the loss function corresponding to a given dataset type.
-
-    :param args: Namespace containing the dataset type ("classification" or "regression").
-    :return: A PyTorch loss function.
-    """
-    if args.task == 'classification':
-        return nn.BCELoss(reduction='mean')
-
-    if args.task == 'regression':
-        return nn.MSELoss(reduction='mean')
 
     
 def construct_loader(X, y, world_size, rank, num_fold, args):
@@ -122,11 +127,17 @@ def construct_loader(X, y, world_size, rank, num_fold, args):
     # If split path not specified then randomly split data
         X_train, X_test, y_train, y_test= train_test_split(X,y, test_size=0.2,shuffle=True)
         X_train, X_val, y_train, y_val= train_test_split(X_train,y_train, test_size=0.125,shuffle=True)                
-
+    
+    
+    mu=np.mean(y_train,axis=0)
+    std=np.std(y,axis=0)
+    
+    
     # Build dataset
     traindata = Dataset(X_train,y_train)
     valdata = Dataset(X_val,y_val)
     testdata = Dataset(X_test,y_test)
+    
 
     # Build dataloader
     train_sampler=torch.utils.data.distributed.DistributedSampler(traindata,num_replicas=world_size,rank=rank%2)
@@ -134,12 +145,43 @@ def construct_loader(X, y, world_size, rank, num_fold, args):
     val_loader = DataLoader(dataset=valdata,batch_size=batchsize,shuffle=True,collate_fn=collate,num_workers=world_size)
     test_loader = DataLoader(dataset=testdata,batch_size=batchsize,shuffle=True,collate_fn=collate) 
     
+    return train_loader, val_loader, test_loader, mu, std
+
+
+class Standardizer:
+    """
+    Z scores labels by using the training mean and standard deviation for each target.
+    This is particularly important for multitarget training. 
     
+    """
     
+    def __init__(self, mean, std, device,task='regression'):
+        if task == 'regression':
+            self.mean = mean
+            self.std = std
+            self.device = device
+            
+        elif task == 'classification':
+            self.mean = 0
+            self.std = 1
+            self.device = device
+
+    def __call__(self, x, rev=False):
+        
+        """
+        Params
+        
+        x   : Pytorch tensor
+        rev : whether or not to reverse the stardardization. If rev = True, the __call__ "unstandardizes" x
+        
+        """
+        
+        if rev:
+            return torch.Tensor((x.detach().cpu().numpy() * self.std) + self.mean)
+
+        return (x - torch.tensor(self.mean).to(self.device)) / torch.tensor(self.std).to(self.device)
     
-    
-    return train_loader, val_loader, test_loader
-    
+
 def get_dist_env() -> tuple:
     
     """
@@ -223,8 +265,8 @@ def make_parity(y_train_pred:np.ndarray ,y_train_all: np.ndarray ,y_test_pred: n
         axs=[axs]
 
     for i,a in enumerate(axs):
-        axs[i].scatter(y_train_all[:,i], y_train_pred[:,i],label=f'train (MSE = {mse_train[i]:.3f})', alpha=0.6)
-        axs[i].scatter(y_test_all[:,i], y_test_pred[:,i], label=f'test (MSE = {mse_test[i]:.3f})', alpha=0.6)
+        axs[i].scatter(y_train_all[:,i], y_train_pred[:,i],label=f'train (MAE = {mse_train[i]:.3f})', alpha=0.6)
+        axs[i].scatter(y_test_all[:,i], y_test_pred[:,i], label=f'test (MAE = {mse_test[i]:.3f})', alpha=0.6)
         axs[i].plot(y_train_all[:,i],y_train_all[:,i])
         axs[i].legend()
         pl.set(axs[i],title="True vs. Predicted Value",xlabel="True",ylabel="Predicted",labelsize=16,fontsize=16)

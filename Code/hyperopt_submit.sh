@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name hyperopt
+#SBATCH --job-name hyperopt_norm
 #SBATCH -o %x-%j.log
 #SBATCH -N 1
 #SBATCH -c 20
@@ -28,7 +28,7 @@ echo "MASTER_PORT : ${MASTER_PORT}"
 
 
 data_path='/Data/Ylide_Gas_SpecialCases_Removed.csv'
-log_dir='ylide/hyperopt/expt0'
+log_dir='ylide/hyperopt/expt1'
 split_path='ylide/80_10_20/split_'
 gnn_type='mpn'
 

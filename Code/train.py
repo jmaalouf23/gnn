@@ -2,7 +2,7 @@ import os
 import sys
 
 from model.models import MainModel
-from model.utils import create_logger, make_learning_curve, make_parity, loop, get_dist_env, get_loss_func, construct_loader
+from model.utils import create_logger, make_learning_curve, make_parity, loop, get_dist_env, get_loss_func, construct_loader, Standardizer
 from model.parsing import parse_train_args
 
 import torch
@@ -38,7 +38,6 @@ def train(rank, world_size, hostname, args):
     n=len(X)
     X=np.reshape(X,(n,1))
     y=df.iloc[:,1:args.n_out + 1].to_numpy()
-    
 
     """ Model development. """
 
@@ -51,20 +50,28 @@ def train(rank, world_size, hostname, args):
 
     for fold in range(args.n_fold):
         
+        device=rank%2
+        train_loader, val_loader, test_loader, mu, std = construct_loader(X, y, world_size, rank, fold, args)      
+        standardizer= Standardizer(mu,std,device)
         
-        train_loader, val_loader, test_loader= construct_loader(X, y, world_size, rank, fold, args)      
-
+        logger.info(f'Mean used for standardization: {mu}')
+        logger.info(f'Standard deviation used for standardization: {std}')
         
+        os.makedirs(f'{mydrive}/Models/{ModelFolder}/fold_{fold}',exist_ok=True)
+       
+        np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/mean.npy',mu)
+        np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/std.npy',std)
+                
         for model_index in range(args.ensemble):
       
             os.makedirs(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}',exist_ok=True)
+        
 
             # Create model
             train_losses = []
             val_losses = []
 
             model = MainModel(args,rank)
-            device=rank%2
             model=model.to(device)
             model=DistributedDataParallel(model,device_ids=[rank%2]) 
             optimizer = optim.Adam(model.parameters(), lr=args.lr)
@@ -83,8 +90,8 @@ def train(rank, world_size, hostname, args):
 
             for epoch in range(args.n_epochs):
 
-                train_loss = loop(model, train_loader, loss, device, optimizer)
-                val_loss = loop(model, val_loader, loss, device, optimizer, evaluation=True)
+                train_loss = loop(model, train_loader, loss, device, optimizer,standardizer)
+                val_loss = loop(model, val_loader, loss, device, optimizer, standardizer, evaluation=True)
                 scheduler.step(val_loss)
 
                 train_losses.append(train_loss)
@@ -117,7 +124,7 @@ def train(rank, world_size, hostname, args):
             for data in train_loader:
                 x_train, y_train = data
                 y_train_all.append(np.vstack(tuple(y_train)))
-                y_pred = model(x_train)
+                y_pred = standardizer(model(x_train),rev=True)
                 y_train_pred.append(y_pred.cpu().detach().numpy())
                 
             y_train_pred= np.vstack(tuple(y_train_pred))
@@ -128,7 +135,7 @@ def train(rank, world_size, hostname, args):
             for data in test_loader:
                 x_test, y_test = data
                 y_test_all.append(np.vstack(tuple(y_test)))
-                y_pred = model(x_test)
+                y_pred = standardizer(model(x_test),rev=True)
                 y_test_pred.append(y_pred.cpu().detach().numpy())
 
             y_test_pred= np.vstack(tuple(y_test_pred))
