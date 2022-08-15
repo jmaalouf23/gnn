@@ -27,7 +27,7 @@ echo "MASTER_PORT : ${MASTER_PORT}"
 
 
 data_path='/Data/Ylide_Gas_SpecialCases_Removed_redox.csv'
-log_dir='ylide/test/expt7'
+log_dir='ylide/test/expt8'
 split_path='ylide/80_10_20/split_'
 lr=1e-3
 

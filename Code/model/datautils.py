@@ -8,9 +8,10 @@ class Dataset(torch.utils.data.Dataset):
         """ 
         GraphDataset object
         Args:
-        X: Array where the first column is solute smiles string and second column
-        is solvent smiles strings
-        y: 1d array of target values
+        X: Array where the each column is set of smiles. For example, when predicting solubility,
+            the first column can be solute smiles, the second column can be the solvent smiles.
+        y: array of target values of size N vs D, where D are is the number of targets and N is the dataset size.
+        
         """
 
         self.X=X #Smile strings
@@ -27,10 +28,12 @@ def collate(batch):
     
     """
     Batch multiple graphs into one batched graph
-    Args:
+    
+    Params:
     batch (tuple): tuple of X,y data where X are smiles and y are target values
+    
     Return:
-    (tuple): Batched AtomicNum, Edge, Natom, y
+    (tuple): batched X and y
     """
     
     X_batch=[]

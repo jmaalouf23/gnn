@@ -2,17 +2,14 @@ import os
 import sys
 
 from model.models import MainModel
-from model.utils import create_logger, make_learning_curve,make_parity
-from model.datautils import Dataset, collate
+from model.utils import create_logger, make_learning_curve, make_parity, loop, get_dist_env, get_loss_func, construct_loader
 from model.parsing import parse_train_args
-
 
 import torch
 from torch import nn, optim
 import torch.distributed as dist
 from torch.multiprocessing import Process
 from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data import DataLoader
 
 import socket
 import numpy as np
@@ -23,13 +20,7 @@ from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.*') # turn off RDKit warning message 
 
 
-def train(rank, world_size, hostname,args):
-
-    #Training hyperparameters
-    lr=args.lr
-    num_folds=args.n_fold
-    epochs=args.n_epochs
-    batchsize=int(args.batch_size/world_size)
+def train(rank, world_size, hostname, args):
 
     #Set directory
     path=os.getcwd()
@@ -42,8 +33,7 @@ def train(rank, world_size, hostname,args):
        
 
     """Import Data Set"""
-    data_path=args.data_path
-    df = pd.read_csv(f'{mydrive}{data_path}')
+    df = pd.read_csv(f'{mydrive}{args.data_path}')
     X=df.iloc[:,0].to_numpy()
     n=len(X)
     X=np.reshape(X,(n,1))
@@ -59,41 +49,15 @@ def train(rank, world_size, hostname,args):
     for arg in vars(args):
         logger.info(f'{arg}: {getattr(args, arg)}')
 
-    for i in range(num_folds):
-        
-        """Split Data"""
-        if args.split_path is not None:
-            #split data based on split indices
-            splits = np.load(f'{mydrive}/Splits/{args.split_path}{i}.npy',allow_pickle=True)
-            train_indices = splits[0]
-            val_indices   = splits[1]
-            test_indices  = splits[2]
-
-            X_train, y_train = (X[train_indices,:],y[train_indices,:])
-            X_val, y_val = (X[val_indices,:],y[val_indices,:])
-            X_test,y_test= (X[test_indices,:],y[test_indices,:])
-        else:
-        # If split path not specified then randomly split data
-            X_train, X_test, y_train, y_test= train_test_split(X,y, test_size=0.2,shuffle=True)
-            X_train, X_val, y_train, y_val= train_test_split(X_train,y_train, test_size=0.125,shuffle=True)                
-
-        # Build dataset
-        traindata = Dataset(X_train,y_train)
-        valdata = Dataset(X_val,y_val)
-        testdata = Dataset(X_test,y_test)
-
-        # Build dataloader
-        train_sampler=torch.utils.data.distributed.DistributedSampler(traindata,num_replicas=world_size,rank=rank%2)
-        train_loader = DataLoader(dataset=traindata,batch_size=batchsize,collate_fn=collate,sampler=train_sampler,num_workers=world_size )
-        val_loader = DataLoader(dataset=valdata,batch_size=batchsize,shuffle=True,collate_fn=collate,num_workers=world_size)
-        test_loader = DataLoader(dataset=testdata,batch_size=batchsize,shuffle=True,collate_fn=collate)
+    for fold in range(args.n_fold):
         
         
+        train_loader, val_loader, test_loader= construct_loader(X, y, world_size, rank, fold, args)      
 
         
         for model_index in range(args.ensemble):
       
-            os.makedirs(f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}',exist_ok=True)
+            os.makedirs(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}',exist_ok=True)
 
             # Create model
             train_losses = []
@@ -103,9 +67,10 @@ def train(rank, world_size, hostname,args):
             device=rank%2
             model=model.to(device)
             model=DistributedDataParallel(model,device_ids=[rank%2]) 
-            optimizer = optim.Adam(model.parameters(), lr=lr)
+            optimizer = optim.Adam(model.parameters(), lr=args.lr)
             scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=8, verbose=True)
-
+            loss=get_loss_func(args)
+            
             logger.info(f'\nOptimizer parameters are:\n{optimizer}\n')
             logger.info(f'Scheduler state dict is:')
             
@@ -114,12 +79,12 @@ def train(rank, world_size, hostname,args):
             logger.info('\n')
 
 
-            logger.info(f'Beginning to Train fold {i} model {model_index} for {epochs} epochs \n')
+            logger.info(f'Beginning to Train fold {fold} model {model_index} for {args.n_epochs} epochs \n')
 
-            for epoch in range(epochs):
+            for epoch in range(args.n_epochs):
 
-                train_loss = loop(model, train_loader, epoch, device, optimizer)
-                val_loss = loop(model, val_loader, epoch, device, optimizer, evaluation=True)
+                train_loss = loop(model, train_loader, loss, device, optimizer)
+                val_loss = loop(model, val_loader, loss, device, optimizer, evaluation=True)
                 scheduler.step(val_loss)
 
                 train_losses.append(train_loss)
@@ -130,7 +95,7 @@ def train(rank, world_size, hostname,args):
 
                 if val_loss == min(val_losses):
 
-                    torch.save(model.module.state_dict(), f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}/best_model.pt')
+                    torch.save(model.module.state_dict(), f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/best_model.pt')
 
             logger.info(f'Best model occurs at epoch {val_losses.index(min(val_losses))} with val loss = {min(val_losses)} ')
             
@@ -139,7 +104,7 @@ def train(rank, world_size, hostname,args):
             
             device=rank%2
             model=MainModel(args,rank).to(rank%2)
-            state_dict=torch.load(f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}/best_model.pt', map_location=f'cuda:{device}')
+            state_dict=torch.load(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/best_model.pt', map_location=f'cuda:{device}')
             model.load_state_dict(state_dict)
             model.eval()     
             
@@ -175,21 +140,21 @@ def train(rank, world_size, hostname,args):
             mae_train = np.mean( np.abs(y_train_pred-y_train_all), axis = 0)
             mae_test = np.mean( np.abs(y_test_pred-y_test_all), axis = 0)
 
-            logger.info(f'Test MAE for fold {i} model {model_index} is {mae_test} \n')
+            logger.info(f'Test MAE for fold {fold} model {model_index} is {mae_test} \n')
 
 
             """Plot Results"""
 
-            make_learning_curve(epochs,train_losses, val_losses, f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}/epochcurve_{i}_{model_index}.png')
-            make_parity(y_train_pred,y_train_all,y_test_pred,y_test_all,f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}/parity_{i}_{model_index}.png',mae_train, mae_test)
+            make_learning_curve(args.n_epochs,train_losses, val_losses, f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/epochcurve_{fold}_{model_index}.png')
+            make_parity(y_train_pred,y_train_all,y_test_pred,y_test_all,f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/parity_{fold}_{model_index}.png',mae_train, mae_test)
 
             model_train_losses.append(train_losses);
             model_val_losses.append(val_losses);
 
-            np.save(f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}/y_train_true.npy',y_train_all)
-            np.save(f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}/y_train_pred.npy',y_train_pred)
-            np.save(f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}/y_test_true.npy',y_test_all)
-            np.save(f'{mydrive}/Models/{ModelFolder}/fold_{i}/model_{model_index}/y_test_pred.npy',y_test_pred)
+            np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_train_true.npy',y_train_all)
+            np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_train_pred.npy',y_train_pred)
+            np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_test_true.npy',y_test_all)
+            np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_test_pred.npy',y_test_pred)
     
     
         #Plot epoch curve averaged over all ensemble models within a given fold
@@ -204,50 +169,11 @@ def train(rank, world_size, hostname,args):
         model_val_losses_arr_std=np.std(model_val_losses_arr, axis=0)
 
         #save average epoch curve arrays
-        np.save(f'{mydrive}/Models/{ModelFolder}/fold_{i}/train_losses_arr.npy',model_train_losses_arr)
-        np.save(f'{mydrive}/Models/{ModelFolder}/fold_{i}/val_losses_arr.npy',model_val_losses_arr)
+        np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/train_losses_arr.npy',model_train_losses_arr)
+        np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/val_losses_arr.npy',model_val_losses_arr)
     
-        make_learning_curve(epochs, model_train_losses_arr_avg.squeeze(), model_val_losses_arr_avg.squeeze(), f'{mydrive}/Models/{ModelFolder}/fold_{i}/AverageEpochCurve.png',fill_between=True,model_train_losses_arr_avg= model_train_losses_arr_avg, model_train_losses_arr_std= model_train_losses_arr_std, model_val_losses_arr_avg= model_val_losses_arr_avg,model_val_losses_arr_std= model_val_losses_arr_std)
+        make_learning_curve(args.n_epochs, model_train_losses_arr_avg.squeeze(), model_val_losses_arr_avg.squeeze(), f'{mydrive}/Models/{ModelFolder}/fold_{fold}/AverageEpochCurve.png',fill_between=True,model_train_losses_arr_avg= model_train_losses_arr_avg, model_train_losses_arr_std= model_train_losses_arr_std, model_val_losses_arr_avg= model_val_losses_arr_avg,model_val_losses_arr_std= model_val_losses_arr_std)
     
-
-def loop(model, loader, epoch, device, optimizer, evaluation=False): #consider changing name to eval
-
-    if evaluation:
-        model.eval()
-        mode = "eval"
-    else:
-        model.train()
-        mode = "train"
-    batch_losses = []
-
-    for data in loader:
-        x, y = data
-        y=torch.tensor(y).to(device) 
-        pred = model(x)
-        loss = (pred.squeeze()-y.squeeze()).pow(2).mean()
-
-        if not evaluation:
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        batch_losses.append(loss.item())
-
-    return np.array(batch_losses).mean()    
-    
-
-
-def get_dist_env():
-    if 'OMPI_COMM_WORLD_SIZE' in os.environ:
-        world_size = int(os.getenv('OMPI_COMM_WORLD_SIZE'))
-    else:
-        world_size = int(os.getenv('SLURM_NTASKS'))
-
-    if 'OMPI_COMM_WORLD_RANK' in os.environ:
-        global_rank = int(os.getenv('OMPI_COMM_WORLD_RANK'))
-    else:
-        global_rank = int(os.getenv('SLURM_PROCID'))
-    return global_rank, world_size
 
 
 if __name__ == "__main__":
@@ -259,7 +185,10 @@ if __name__ == "__main__":
     
     hostname = socket.gethostname()
     args = parse_train_args()
-    # You have run dist.init_process_group to initialize the distributed environment always use NCCL as the backend. Gloo performance is pretty bad and MPI is currently unsupported (for a number of reasons).     
+    
+    # You have run dist.init_process_group to initialize the distributed environment always use NCCL as the backend. 
+    #Gloo performance is pretty bad and MPI is currently unsupported (for a number of reasons).
+    
     dist.init_process_group(backend='nccl', rank=global_rank, world_size=world_size)
     
     train(global_rank, world_size, hostname, args)

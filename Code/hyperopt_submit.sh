@@ -27,7 +27,7 @@ echo "MASTER_PORT : ${MASTER_PORT}"
 
 
 
-data_path='/Data/Ylide_Gas_SpecialCases_Removed_redox.csv'
+data_path='/Data/Ylide_Gas_SpecialCases_Removed.csv'
 log_dir='ylide/hyperopt/expt0'
 split_path='ylide/80_10_20/split_'
 gnn_type='mpn'
@@ -37,9 +37,9 @@ message='sum'
 pool='sum'
 
 #-----Entire Model Parameters--------
-n_epochs=2
+n_epochs=100
 num_workers=20
-n_out=1
+n_out=3
 n_ensemble=1
 n_fold=5
 #----Hyperopt Parameters------
