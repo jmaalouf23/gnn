@@ -138,8 +138,6 @@ def train(rank, world_size, hostname, args):
 
                 """Load Best Model & Get Predictions"""
 
-                #if rank ==0:
-
                 if args.gnn_type=='mpn':
                     model = MainModel(args,rank).to(rank%2)
                 elif args.gnn_type=='mpn2':
