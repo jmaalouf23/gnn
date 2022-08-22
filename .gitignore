@@ -8,4 +8,6 @@ Code/model/.ipynb*
 Code/model/__pycache__*
 Code/__pycache__/
 Code/*.log
+Code/submit_*
+Code/hyperopt_submit_*
 .ipynb*

@@ -9,7 +9,7 @@ import torch
 from torch import nn, optim
 import torch.distributed as dist
 from torch.multiprocessing import Process
-from torch.nn.parallel import DistributedDataParallel
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 import socket
 import numpy as np
@@ -94,7 +94,7 @@ def train(rank, world_size, hostname, args):
                 
             model=model.to(device)
             if args.distributed:
-                model=DistributedDataParallel(model,device_ids=[rank%2],find_unused_parameters=True) 
+                model=DDP(model,device_ids=[rank%2],find_unused_parameters=True) 
             optimizer = optim.Adam(model.parameters(), lr=args.lr)
             scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=8, verbose=True)
             loss=get_loss_func(args)
@@ -148,36 +148,36 @@ def train(rank, world_size, hostname, args):
                 model.eval()     
 
 
-                y_train_all  = []
+                y_train_true  = []
                 y_train_pred = []
-                y_test_all   = []
+                y_test_true   = []
                 y_test_pred  = []
 
                 for data in train_loader_all:
                     x_train, y_train = data
-                    y_train_all.append(np.vstack(tuple(y_train)))
+                    y_train_true.append(np.vstack(tuple(y_train)))
                     y_pred = standardizer(model(x_train),rev=True)
                     y_train_pred.append(y_pred.cpu().detach().numpy())
 
 
                 y_train_pred= np.vstack(tuple(y_train_pred))
-                y_train_all= np.vstack(tuple(y_train_all))
+                y_train_true= np.vstack(tuple(y_train_true))
 
 
                 for data in test_loader:
                     x_test, y_test = data
-                    y_test_all.append(np.vstack(tuple(y_test)))
+                    y_test_true.append(np.vstack(tuple(y_test)))
                     y_pred = standardizer(model(x_test),rev=True)
                     y_test_pred.append(y_pred.cpu().detach().numpy())
 
                 y_test_pred= np.vstack(tuple(y_test_pred))
-                y_test_all= np.vstack(tuple(y_test_all)) 
+                y_test_true= np.vstack(tuple(y_test_true)) 
 
-                mse_train = np.mean( np.power( y_train_pred-y_train_all, 2 ), axis = 0)
-                mse_test = np.mean( np.power( y_test_pred-y_test_all, 2 ), axis = 0)
+                mse_train = np.mean( np.power( y_train_pred-y_train_true, 2 ), axis = 0)
+                mse_test = np.mean( np.power( y_test_pred-y_test_true, 2 ), axis = 0)
 
-                mae_train = np.mean( np.abs(y_train_pred-y_train_all), axis = 0)
-                mae_test = np.mean( np.abs(y_test_pred-y_test_all), axis = 0)
+                mae_train = np.mean( np.abs(y_train_pred-y_train_true), axis = 0)
+                mae_test = np.mean( np.abs(y_test_pred-y_test_true), axis = 0)
 
                 logger.info(f'Test MAE for fold {fold} model {model_index} is {mae_test} \n')
 
@@ -189,14 +189,12 @@ def train(rank, world_size, hostname, args):
 
                 model_train_losses.append(train_losses);
                 model_val_losses.append(val_losses);
-
-                np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_train_true.npy',y_train_all)
+                
+                #Save prediction and true values
+                np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_train_true.npy',y_train_true)
                 np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_train_pred.npy',y_train_pred)
-                np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_test_true.npy',y_test_all)
+                np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_test_true.npy',y_test_true)
                 np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/model_{model_index}/y_test_pred.npy',y_test_pred)
-
-
-            #Plot epoch curve averaged over all ensemble models within a given fold
 
             model_train_losses_arr=np.array(model_train_losses) #2D array of Num_ensembles by Num_epochs
             model_val_losses_arr=np.array(model_val_losses)
@@ -210,7 +208,8 @@ def train(rank, world_size, hostname, args):
             #save average epoch curve arrays
             np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/train_losses_arr.npy',model_train_losses_arr)
             np.save(f'{mydrive}/Models/{ModelFolder}/fold_{fold}/val_losses_arr.npy',model_val_losses_arr)
-            
+        
+            #Plot epoch curve averaged over all ensemble models within a given fold
             if args.include_plots:
                 make_learning_curve(args.n_epochs, model_train_losses_arr_avg.squeeze(), model_val_losses_arr_avg.squeeze(), f'{mydrive}/Models/{ModelFolder}/fold_{fold}/AverageEpochCurve.png',fill_between=True,model_train_losses_arr_avg= model_train_losses_arr_avg, model_train_losses_arr_std= model_train_losses_arr_std, model_val_losses_arr_avg= model_val_losses_arr_avg,model_val_losses_arr_std= model_val_losses_arr_std)
 
