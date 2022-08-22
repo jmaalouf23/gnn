@@ -10,7 +10,7 @@ import socket
 from model.models import MainModel
 from model.utils import create_logger, make_learning_curve,make_parity, loop, get_dist_env, get_loss_func, construct_loader, Standardizer
 from model.datautils import Dataset, collate
-from model.parsing import parse_train_args,add_train_args, modify_train_args
+from model.parsing import parse_train_args,add_train_args
 
 import torch
 from torch import nn, optim
@@ -41,7 +41,7 @@ def optimize(trial, args, rank, world_size,hostname):
     epochs=args.n_epochs
     batchsize=int(args.batch_size/world_size)
     
-    modify_train_args(args)
+    #modify_train_args(args)
     best_val_loss_lst = []
     torch.manual_seed(args.pytorch_seed)
     
@@ -62,21 +62,23 @@ def optimize(trial, args, rank, world_size,hostname):
         standardizer= Standardizer(mu,std,device)
         
 
-        # create model, optimizer, scheduler, and loss fn
         for model_index in range(args.ensemble):
             
-            model = MainModel(args,rank)
+            # create model, optimizer, scheduler, and loss fn
+            if args.gnn_type=='mpn':
+                model = MainModel(args,rank)
+            elif args.gnn_type=='mpn2':
+                model = MainModel_2(args,rank)
+                
             model=model.to(device)
-            model=DistributedDataParallel(model,device_ids=[rank%2]) 
+            model=DistributedDataParallel(model,device_ids=[rank%2],find_unused_parameters=True) 
             optimizer = optim.Adam(model.parameters(), lr=lr)
             scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.5, patience=8, verbose=True)    
             loss=get_loss_func(args)
             best_val_loss = math.inf
             best_epoch = 0
 
-        # record args, optimizer, and scheduler info
-
-        # train
+            # train
             for epoch in range(0, args.n_epochs):
                 train_loss = loop(model, train_loader, loss, device, optimizer, standardizer)
                 val_loss = loop(model, val_loader, loss, device, optimizer, standardizer, evaluation=True)

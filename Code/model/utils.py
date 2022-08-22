@@ -1,13 +1,9 @@
 import os
 import sys
-sys.path.insert(1,'/data1/groups/manthiram_lab/Utils')
-
 from .datautils import Dataset, collate
-
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
-import plot as pl
 import torch
 from torch import nn
 import torch.distributed as dist
@@ -15,6 +11,9 @@ from torch.multiprocessing import Process
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from argparse import Namespace
+sys.path.insert(1,'/data1/groups/manthiram_lab/Utils')
+import plot as pl
+
 
 def create_logger(name: str, log_dir: str = None) -> logging.Logger:
     """
@@ -62,7 +61,7 @@ def get_loss_func(args: Namespace) -> nn.Module:
     
     
 
-def loop(model, loader, loss, device, optimizer, standardizer, evaluation=False): #consider changing name to eval
+def loop(epoch, model, loader, sampler,loss, device, optimizer, standardizer, args, evaluation=False): #consider changing name to eval
     
     """
     Given a model, if evaliation = False this function "trains" the model with a specific loss function
@@ -79,15 +78,18 @@ def loop(model, loader, loss, device, optimizer, standardizer, evaluation=False)
     returns: the average loss over the entire batch as a numpy array.
     
     """
-
+    
     if evaluation:
         model.eval()
         mode = "eval"
     else:
         model.train()
         mode = "train"
+        if args.distributed:
+            sampler.set_epoch(epoch)
+        
     batch_losses = []
-
+    
     for data in loader:
         x, y = data
         
@@ -112,6 +114,8 @@ def construct_loader(X, y, world_size, rank, num_fold, args):
     
     mydrive=os.path.abspath(os.path.join(os.getcwd(), os.pardir))
     batchsize=int(args.batch_size/world_size)
+      
+    
     """Split Data"""
     if args.split_path is not None:
         #split data based on split indices
@@ -126,26 +130,32 @@ def construct_loader(X, y, world_size, rank, num_fold, args):
     else:
     # If split path not specified then randomly split data
         X_train, X_test, y_train, y_test= train_test_split(X,y, test_size=0.2,shuffle=True)
-        X_train, X_val, y_train, y_val= train_test_split(X_train,y_train, test_size=0.125,shuffle=True)                
-    
+        X_train, X_val, y_train, y_val= train_test_split(X_train,y_train, test_size=0.125,shuffle=True)                  
     
     mu=np.mean(y_train,axis=0)
     std=np.std(y,axis=0)
-    
     
     # Build dataset
     traindata = Dataset(X_train,y_train)
     valdata = Dataset(X_val,y_val)
     testdata = Dataset(X_test,y_test)
     
-
     # Build dataloader
-    train_sampler=torch.utils.data.distributed.DistributedSampler(traindata,num_replicas=world_size,rank=rank%2)
-    train_loader = DataLoader(dataset=traindata,batch_size=batchsize,collate_fn=collate,sampler=train_sampler,num_workers=world_size )
-    val_loader = DataLoader(dataset=valdata,batch_size=batchsize,shuffle=True,collate_fn=collate,num_workers=world_size)
-    test_loader = DataLoader(dataset=testdata,batch_size=batchsize,shuffle=True,collate_fn=collate) 
+    #old num_workers was world_size
+    if args.distributed:
+        train_sampler= torch.utils.data.distributed.DistributedSampler(traindata,num_replicas=args.num_workers,rank=rank%2)
+        train_loader = DataLoader(dataset=traindata,batch_size=batchsize,collate_fn=collate,sampler=train_sampler,num_workers=args.num_workers, pin_memory=True )
+        train_loader_all=DataLoader(dataset=traindata,batch_size=batchsize,collate_fn=collate,num_workers=args.num_workers, pin_memory=True )
+    else:
+        train_loader = DataLoader(dataset=traindata,batch_size=batchsize,collate_fn=collate,num_workers=args.num_workers, pin_memory=True )
     
-    return train_loader, val_loader, test_loader, mu, std
+    val_loader = DataLoader(dataset=valdata,batch_size=batchsize,shuffle=True,collate_fn=collate,num_workers=world_size,pin_memory=True)
+    test_loader = DataLoader(dataset=testdata,batch_size=batchsize,shuffle=True,collate_fn=collate,pin_memory=True,num_workers=args.num_workers) 
+    
+    if args.distributed:
+        return train_loader, train_loader_all, train_sampler,val_loader, test_loader, mu, std
+    else:
+        return train_loader,val_loader, test_loader, mu, std
 
 
 class Standardizer:

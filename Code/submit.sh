@@ -6,6 +6,9 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --gres=gpu:volta:1
 
+
+
+
 source /etc/profile
 module load anaconda/2021a
 source activate ml
@@ -25,9 +28,8 @@ echo "MASTER_PORT : ${MASTER_PORT}"
 
 # Do not use the torch.distributed.launch utility. Use mpirun as shown below to launch your code. 
 
-
 data_path='/Data/Ylide_Gas_SpecialCases_Removed.csv'
-log_dir='ylide/test/expt11'
+log_dir='ylide/test/expt12'
 split_path='ylide/80_10_20/split_'
 lr=1e-3
 
@@ -42,7 +44,7 @@ ffn_depth=2
 ffn_hiddensize=300
 
 #Entire Model Parameters--------
-n_epochs=100
+n_epochs=5
 batch_size=25
 num_workers=20
 n_out=3

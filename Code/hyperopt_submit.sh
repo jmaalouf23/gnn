@@ -41,7 +41,7 @@ n_epochs=100
 num_workers=20
 n_out=3
 n_ensemble=1
-n_fold=5
+n_fold=3
 #----Hyperopt Parameters------
 n_trials=50
 
