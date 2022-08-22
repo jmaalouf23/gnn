@@ -34,8 +34,6 @@ def add_train_args(parser: ArgumentParser):
                         help='Number of workers to use in dataloader')
     parser.add_argument('--no_shuffle', action='store_true', default=False,
                         help='Whether or not to retain default ordering during training')
-#     parser.add_argument('--shuffle_pairs', action='store_true', default=False,
-#                         help='Whether or not to shuffle only pairs of stereoisomers')
 
     # Model arguments
     parser.add_argument('--gnn_type', type=str,
@@ -53,10 +51,6 @@ def add_train_args(parser: ArgumentParser):
     parser.add_argument('--message', type=str, default='sum',
                         choices=['sum', 'tetra_pd', 'tetra_permute', 'tetra_permute_concat'],
                         help='How to pass neighbor messages')
-#     parser.add_argument('--chiral_features', action='store_true', default=False,
-#                         help='Use local chiral atom features')
-#     parser.add_argument('--global_chiral_features', action='store_true', default=False,
-#                         help='Use global chiral atom features')
     parser.add_argument('--ffn_depth', type=int, default=0, help='FFN layers less the linear output and input layer')
     parser.add_argument('--ffn_hidden_size', type=int, default=300, help='Dimensionality of hidden layers in FFN')
     parser.add_argument('--add_feature_path', type=str,
@@ -71,23 +65,6 @@ def add_train_args(parser: ArgumentParser):
     parser.add_argument('--number_of_molecules', type=int, default=1)
     parser.add_argument('--distributed',action='store_true',default=False)
     parser.add_argument('--include_plots',action='store_true',default=False)
-#Add argument for number of outputs
-
-# def modify_train_args(args: Namespace):
-#     """
-#     Modifies and validates training arguments in place.
-
-#     :param args: Arguments.
-#     """
-#     if args.message.startswith('tetra'):
-#         setattr(args, 'tetra', True)
-#     else:
-#         setattr(args, 'tetra', False)
-
-#     # shuffle=False for custom sampler
-#     if args.shuffle_pairs:
-#         setattr(args, 'no_shuffle', True)
-#     setattr(args, 'device', torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
 
 
 def parse_train_args() -> Namespace:
@@ -99,6 +76,5 @@ def parse_train_args() -> Namespace:
     parser = ArgumentParser()
     add_train_args(parser)
     args = parser.parse_args()
-    #modify_train_args(args)
 
     return args
