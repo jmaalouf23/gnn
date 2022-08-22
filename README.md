@@ -1,4 +1,4 @@
-# ylide_gnn
+#gnn
 
 This repository uses chemprop's development of a message passing neural network (https://github.com/chemprop/chemprop) wrapped in custom code to add an mlp readout layer able to map to multiple properties at once to predict thermodynamic properties of ylide redox mediators. Currently, the models have been trained to predict properties that are important for redox mediator performance including redox potential, deprotonation free energy, and Hydrogen abstraction energy.
 
@@ -25,7 +25,7 @@ The user can also specify a directory with `split_path` where numpy arrays conta
 
 ### Multi GPU Training
 
-MultiGPU training is built in and run with PyTorch's DistributedDataParallel module. Code automatically detects number of nodes and GPUs allocated to the job and splits up training accordingly. This can usually be specified by the appropriate `#SBATCH` command if running on a server with slurm. 
+When passed the `--distributed` flag MultiGPU training is used in and run with PyTorch's DistributedDataParallel module. Code automatically detects number of nodes and GPUs allocated to the job and splits up training accordingly. This can usually be specified by the appropriate `#SBATCH` command if running on a server with slurm. 
 
 ### Hyperparameter Tuning
 
